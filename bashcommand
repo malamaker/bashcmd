@@ -1,0 +1,146 @@
+#!/bin/bash
+
+# Create Symbolic Link if in git directory
+MY_FILENAME="`basename \"$0\"`";
+CURRENT_LEVEL="$( cd "$(dirname "$0")" ; pwd -P )";
+cd "$CURRENT_LEVEL";
+FILEPATH="$CURRENT_LEVEL";
+
+if [ -d "./.git" ]; then
+	cd .. && ONE_LEVEL_UP_PATH=$(pwd);
+	fullPathFileName="${CURRENT_LEVEL}/${MY_FILENAME}";
+	symbLink="${ONE_LEVEL_UP_PATH}/bashcommand";
+	if [ ! -f "$symbLink" ]; then
+		ln -s "$fullPathFileName" "$symbLink";
+		echo "Symbolic Link Created One Level up. Location-File: ${symbLink}";
+	fi
+	cd "$ONE_LEVEL_UP_PATH";
+	FILEPATH="$ONE_LEVEL_UP_PATH";
+fi
+
+scriptCmd="";
+argSubCmd="";
+usedArgCount=0;
+argCounter=0
+lastVar='none';
+
+for var in "${@}"
+do
+  case "${var}" in
+    -h)
+      echo;
+      echo "  Usage: ${0} [options] <command>";
+      echo;
+      echo '  Options:    **No Options Required**';
+      echo '    -h    Help';
+      echo "    -t \"[Arguement Value]\"";
+      echo '          Test sending an arguement';
+      echo '    -l [Directory Location to execute from]';
+      echo '    -s [Sub command]';
+      echo;
+      echo "    e.g. ${0} -l /path/to/some/directory <command>";
+      echo;
+      echo '  Commands:   **Required**';
+      echo '    speedtest     : Run an internet speed test';
+      echo '    nginx-start   : nginx service - Start';
+      echo '    nginx-stop    : nginx service - Stop';
+      echo '    nginx-reload  : nginx service - Reload Config';
+      echo '    nginx-status  : nginx service - Status';
+      echo '    git           : git command. -l and -s are required.';
+      echo "      e.g. ${0} -l <location> -s <sub-command> git";
+      echo "      e.g. ${0} -l ./slackpost/ -s pull git";
+      echo '    bashbot       : bashbot command. -s is required.';
+      echo "      e.g. ${0} -s \"list\" bashbot    # Lists channels available";
+      echo "      e.g. ${0} -s \"[option] [arg1] [arg2]\" bashbot";
+      echo "      e.g. ${0} -s \"[channel] [message]\" bashbot";
+      echo;
+      exit 0;
+      ;;
+  esac
+  case "${lastVar}" in
+    -t)
+      arguementVal="${var}";
+      echo "Test Arguement passed, Arguement Value: ${arguementVal}";
+      exit 0;
+      usedArgCount=$((${usedArgCount}+2));
+      ;;
+    -l)
+      cd "${var}";
+      echo "Changed Directory to \"${var}\"";
+      usedArgCount=$((${usedArgCount}+2));
+      ;;
+    -s)
+      export argSubCmd="${var}";
+      usedArgCount=$((${usedArgCount}+2));
+      ;;
+  esac
+  lastVar="${var}";
+done
+
+if [[ ${#} -eq ${usedArgCount} ]]; then
+  echo 'Command must be passed. Exiting.';
+  exit 0;
+else
+  export scriptCmd="${lastVar}";
+fi
+
+############
+## Execute Commands Here
+############
+
+case "${scriptCmd}" in
+    speedtest)
+      echo 'Command: speedtest - Started';
+      curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python -
+      ;;
+    nginx-start)
+      /usr/local/nginx/sbin/nginx
+      ps -ef | grep -e "nginx" | grep -v -e "grep nginx" -e "grep -e nginx" -e "`basename \"$0\"`";
+      echo 'nginx service - Started';
+      ;;
+    nginx-stop)
+      /usr/local/nginx/sbin/nginx -s stop
+      ps -ef | grep -e "nginx" | grep -v -e "grep nginx" -e "grep -e nginx" -e "`basename \"$0\"`";
+      echo 'nginx service - Stopped';
+      ;;
+    nginx-reload)
+      /usr/local/nginx/sbin/nginx -s reload
+      echo 'nginx service - Config Reloaded';
+      ;;
+    nginx-status)
+      ps -ef | grep -e "nginx" | grep -v -e "grep nginx" -e "grep -e nginx" -e "`basename \"$0\"`";
+      ;;
+    git)
+      git "${argSubCmd}"
+      ;;
+    bashbot)
+      bashbotDir="./bashbot/bashbot";
+      if [ ! -f "$bashbotDir" ]; then
+        git clone https://github.com/malamaker/bashbot.git
+      fi
+      sREPLACE="";
+      if [[ $argSubCmd == "help" ]] ; then
+        bash "$bashbotDir" "-h" | grep -v -e "-h" -e "-l";
+      elif [[ $argSubCmd == "list" ]] ; then
+        bash "$bashbotDir" "-l";
+      elif [[ ${argSubCmd:0:1} == "-" ]] ; then
+        option="$( cut -d ' ' -f 1 <<< "$argSubCmd" )";
+        sEQUALS="${option} ";
+        text="${argSubCmd/${sEQUALS}/${sREPLACE}}";
+        arg1="$( cut -d ' ' -f 1 <<< "$text" )";
+	sEQUALS="${arg1} ";
+        text="${text/${sEQUALS}/${sREPLACE}}";
+        arg2="$( cut -d ' ' -f 1 <<< "$text" )";
+	bash "$bashbotDir" "$option" "$arg1" "$arg2";
+      else
+        channel="$( cut -d ' ' -f 1 <<< "$argSubCmd" )";
+        sEQUALS="${channel} ";
+        text="${argSubCmd/${sEQUALS}/${sREPLACE}}";
+        bash "$bashbotDir" "$channel" "$text";
+      fi
+      ;;
+    *)
+      echo 'Invalid command passed. Exiting.';
+      exit 0;
+      ;;
+esac
